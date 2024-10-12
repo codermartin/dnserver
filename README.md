@@ -37,7 +37,7 @@ For example, to serve a file called `my_zones.toml` file on port `5053`, run:
 dnserver --port 5053 my_zones.toml
 ```
 
-## Usage with Python
+## Usage with Python as dns server
 
 ```python
 from dnserver import DNSServer
@@ -49,6 +49,23 @@ assert server.is_running
 # now you can do some requests with your favorite dns library
 
 server.stop()
+```
+
+## Usage with Python as nftset-dns
+
+Just like [ipset-dns](https://github.com/AnyMoe/ipset-dns) but integrate with nftset.
+
+```bash
+-> # nftset-dns --help
+Usage: nftset-dns [OPTIONS] IPV4_SET IPV6_SET PORT UPSTREAM
+
+Options:
+  --zones-file PATH  TOML file containing zones info  [required]
+  --help             Show this message and exit.
+```
+
+```bash
+nftset-dns test_list test_list 1053 1.1.1.1
 ```
 
 ## Usage with Docker

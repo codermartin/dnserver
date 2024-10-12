@@ -5,6 +5,8 @@ from datetime import datetime
 from pathlib import Path
 from textwrap import wrap
 from typing import Any, List
+import os
+from concurrent.futures import ThreadPoolExecutor
 
 from dnslib import QTYPE, RR, DNSLabel, dns
 from dnslib.proxy import ProxyResolver as LibProxyResolver
@@ -136,6 +138,33 @@ class ProxyResolver(LibProxyResolver):
         logger.info('no local zone found, proxying %s[%s]', request.q.qname, type_name)
         return super().resolve(request, handler)
 
+class ProxyResolverWithNFT(ProxyResolver):
+    nft_executor = ThreadPoolExecutor(max_workers=1)
+
+    def __init__(self, records, upstream, ipv4_nftset, ipv6_nftset):
+        super().__init__(records, upstream)
+        self.ipv4_nftset = ipv4_nftset
+        self.ipv6_nftset = ipv6_nftset
+
+    def nft_add(self, result):
+        for rr in result.rr:
+            if rr.rtype == QTYPE.A:
+                cmd = f'nft add element inet fw4 {self.ipv4_nftset} {{{str(rr.rdata)}}}'
+                logger.info(cmd)
+                os.system(cmd)
+            elif rr.rtype == QTYPE.AAAA:
+                cmd = f'nft add element inet fw4 {self.ipv6_nftset} {{{str(rr.rdata)}}}'
+                logger.info(cmd)
+                os.system(cmd)
+
+    def resolve(self, request, handler):
+        result = super().resolve(request, handler)
+        if request.q.qtype in (QTYPE.A, QTYPE.AAAA):
+            try:
+                self.nft_executor.submit(self.nft_add, result).result()
+            except BaseException as e:
+                logger.error(e)
+        return result
 
 class DNSServer:
     def __init__(
@@ -175,6 +204,9 @@ class DNSServer:
         self.tcp_server = LibDNSServer(resolver, port=self.port, tcp=True)
         self.udp_server.start_thread()
         self.tcp_server.start_thread()
+        ths = [self.udp_server.thread, self.tcp_server.thread]
+        for th in ths:
+            th.join()
 
     def stop(self):
         self.udp_server.stop()
@@ -191,3 +223,26 @@ class DNSServer:
 
     def set_records(self, zones: List[Zone]):
         self.records.zones = zones
+
+
+class DNSServerWithNFT(DNSServer):
+    def __init__(self, records = None, port = DEFAULT_PORT, upstream = DEFAULT_UPSTREAM, ipv4_nftset = None, ipv6_nftset = None):
+        super().__init__(records, port, upstream)
+        self.ipv4_nftset = ipv4_nftset
+        self.ipv6_nftset = ipv6_nftset
+
+    def start(self):
+        if self.upstream:
+            logger.info('starting DNS server on port %d, upstream DNS server "%s"', self.port, self.upstream)
+            resolver = ProxyResolverWithNFT(self.records, self.upstream, self.ipv4_nftset, self.ipv6_nftset)
+        else:
+            logger.info('starting DNS server on port %d, without upstream DNS server', self.port)
+            resolver = BaseResolver(self.records)
+
+        self.udp_server = LibDNSServer(resolver, port=self.port)
+        self.tcp_server = LibDNSServer(resolver, port=self.port, tcp=True)
+        self.udp_server.start_thread()
+        self.tcp_server.start_thread()
+        ths = [self.udp_server.thread, self.tcp_server.thread]
+        for th in ths:
+            th.join()

@@ -40,11 +40,13 @@ dependencies = [
     'dnslib>=0.9.20',
     'tomli;python_version<"3.11"',
     'typing_extensions;python_version<"3.8"',
+    'click==8.1.7',
 ]
 dynamic = ['version', 'license']
 
 [project.scripts]
-dnserver = 'dnserver.cli:cli'
+dnserver = 'dnserver.cli:dnserver'
+nftset-dns = 'dnserver.cli:nftset_dns'
 
 [project.urls]
 Homepage = 'https://github.com/samuelcolvin/dnserver'

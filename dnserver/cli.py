@@ -5,11 +5,12 @@ import os
 import signal
 import sys
 from time import sleep
+import click
 
-from .main import DEFAULT_UPSTREAM, DNSServer, logger
+from .main import DEFAULT_UPSTREAM, DNSServer, logger, DNSServerWithNFT
 from .version import VERSION
 
-__all__ = ('cli',)
+__all__ = ('cli', 'nftset_dns')
 
 
 def handle_sig(signum, frame):  # pragma: no cover
@@ -70,12 +71,29 @@ def cli_logic(args: list[str]) -> int:
     signal.signal(signal.SIGTERM, handle_sig)
     signal.signal(signal.SIGINT, handle_sig)
 
-    server = DNSServer.from_toml(zones_file, port=port, upstream=upstream)
-    server.start()
+    try:
+        server = DNSServer.from_toml(zones_file, port=port, upstream=upstream)
+        server.start()
+    except KeyboardInterrupt:  # pragma: no cover
+        pass
+    finally:
+        logger.info('stopping DNS server')
+        server.stop()
+    return 0
+
+
+@click.command()
+@click.argument('ipv4_set', type=click.STRING, required=True)
+@click.argument('ipv6_set', type=click.STRING, required=True)
+@click.argument('port', type=click.INT, required=True)
+@click.argument("upstream", type=click.STRING, required=True)
+def nftset_dns(ipv4_set: str, ipv6_set: str, port: int, upstream: str):
+    signal.signal(signal.SIGTERM, handle_sig)
+    signal.signal(signal.SIGINT, handle_sig)
 
     try:
-        while server.is_running:
-            sleep(0.1)
+        server = DNSServerWithNFT(port=port, upstream=upstream, ipv4_nftset=ipv4_set, ipv6_nftset=ipv6_set)
+        server.start()
     except KeyboardInterrupt:  # pragma: no cover
         pass
     finally:
@@ -83,7 +101,3 @@ def cli_logic(args: list[str]) -> int:
         server.stop()
 
     return 0
-
-
-def cli():  # pragma: no cover
-    exit(cli_logic(sys.argv[1:]))
