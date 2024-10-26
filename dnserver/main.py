@@ -147,15 +147,21 @@ class ProxyResolverWithNFT(ProxyResolver):
         self.ipv6_nftset = ipv6_nftset
 
     def nft_add(self, result):
+        ipv4_list = []
+        ipv6_list = []
         for rr in result.rr:
             if rr.rtype == QTYPE.A:
-                cmd = f'nft add element inet fw4 {self.ipv4_nftset} {{{str(rr.rdata)}}}'
-                logger.info(cmd)
-                os.system(cmd)
+                ipv4_list.append(str(rr.rdata))
             elif rr.rtype == QTYPE.AAAA:
-                cmd = f'nft add element inet fw4 {self.ipv6_nftset} {{{str(rr.rdata)}}}'
-                logger.info(cmd)
-                os.system(cmd)
+                ipv6_list.append(str(rr.rdata))
+        if ipv4_list:
+            cmd = f'nft add element inet fw4 {self.ipv4_nftset} {{{",".join(ipv4_list)}}}'
+            logger.info(cmd)
+            os.system(cmd)
+        if ipv6_list:
+            cmd = f'nft add element inet fw4 {self.ipv6_nftset} {{{",".join(ipv6_list)}}}'
+            logger.info(cmd)
+            os.system(cmd)
 
     def resolve(self, request, handler):
         result = super().resolve(request, handler)
